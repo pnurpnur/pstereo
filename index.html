@@ -222,6 +222,17 @@
             justify-content: center;
         }
 
+        .artist-link {
+            color: inherit;
+            text-decoration: none;
+            border-bottom: 1px solid transparent;
+        }
+
+        .artist-link:hover {
+            color: var(--cyan);
+            border-bottom-color: var(--cyan);
+        }
+
         .artist-box:hover {
             transform: translateY(-2px);
             border-color: var(--cyan);
@@ -405,6 +416,18 @@
             return `artist-${name.replace(/\s+/g, '-').toLowerCase()}`;
         }
 
+        // Artistnavn -> pstereo.no-slug: lowercase, mellomrom blir bindestrek.
+        // Tegn som ikke hører hjemme i en URL (&, :, ., ') fjernes.
+        function getArtistUrl(name) {
+            const slug = name
+                .toLowerCase()
+                .replace(/[^a-z0-9æøå\s-]/g, '')
+                .trim()
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-');
+            return `https://www.pstereo.no/artist/${slug}/`;
+        }
+
         function timeToMinutes(timeStr) {
             const [h, m] = timeStr.split(':').map(Number);
             return h * 60 + m;
@@ -481,7 +504,16 @@
 
                     const nameEl = document.createElement('div');
                     nameEl.className = 'name';
-                    nameEl.textContent = concert.name;
+
+                    const link = document.createElement('a');
+                    link.className = 'artist-link';
+                    link.href = getArtistUrl(concert.name);
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    link.textContent = concert.name;
+                    // Ikke la lenkeklikket også endre Ja/Kanskje/Nope
+                    link.addEventListener('click', (e) => e.stopPropagation());
+                    nameEl.appendChild(link);
 
                     box.appendChild(timeEl);
                     box.appendChild(nameEl);
