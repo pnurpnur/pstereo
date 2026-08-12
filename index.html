@@ -63,12 +63,12 @@
         }
 
         .tab-btn {
-            padding: 10px 30px;
+            padding: 5px 30px;
             border: 2px solid var(--cyan);
             background: transparent;
             color: #fff;
             cursor: pointer;
-            font-size: 0.8em;
+            font-size: 0.7em;
             border-radius: 25px;
             transition: all 0.3s;
             font-weight: bold;
@@ -325,7 +325,7 @@
                     </g>
                 </g>
             </svg>
-            <p class="instructions">Klikk på artister for å gå mellom JA, KANSKJE og NOPE</p>
+            <p class="instructions">Klikk i artistboks setter din status<br />Treffer du artisnavn får du mer info</p>
         </header>
 
         <div class="tabs">
@@ -357,6 +357,8 @@
         const END_HOUR = 24;
         const CONCERT_MINUTES = 45; // hver boks er 45 minutter høy
         const BOX_HEIGHT = (CONCERT_MINUTES / 60) * HOUR_HEIGHT;
+        // Måned er 0-indeksert: 7 = august. Lokal tid, ikke UTC.
+        const SATURDAY_FROM = new Date(2026, 7, 22);
 
         // Program data fra bildene
         const schedule = {
@@ -416,9 +418,20 @@
             return `artist-${name.replace(/\s+/g, '-').toLowerCase()}`;
         }
 
+        // pstereo.no har noen sluger som ikke følger navnet. Vi må lenke til
+        // den de faktisk bruker, ikke den som er riktig skrevet.
+        const SLUG_OVERRIDES = {
+            // pstereo.no skriver "roundhouse", bandet heter "Roadhouse"
+            'RYAN DAVIS & THE ROADHOUSE BAND': 'ryan-davis-the-roundhouse-band'
+        };
+
         // Artistnavn -> pstereo.no-slug: lowercase, mellomrom blir bindestrek.
         // Tegn som ikke hører hjemme i en URL (&, :, ., ') fjernes.
         function getArtistUrl(name) {
+            if (SLUG_OVERRIDES[name]) {
+                return `https://www.pstereo.no/artist/${SLUG_OVERRIDES[name]}/`;
+            }
+
             const slug = name
                 .toLowerCase()
                 .replace(/[^a-z0-9æøå\s-]/g, '')
@@ -445,6 +458,7 @@
             renderSchedule('friday');
             renderSchedule('saturday');
             setupTabs();
+            selectDay(getDefaultDay());
             restoreAllStates();
         });
 
@@ -560,15 +574,25 @@
             });
         }
 
+        function selectDay(day) {
+            document.querySelectorAll('.tab-btn').forEach(b => {
+                b.classList.toggle('active', b.dataset.day === day);
+            });
+            document.querySelectorAll('.schedule-container').forEach(c => {
+                c.classList.toggle('active', c.id === `${day}-container`);
+            });
+        }
+
+        // Fra og med lørdag 22.08.2026 er det lørdagsprogrammet som er aktuelt
+        function getDefaultDay() {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            return today >= SATURDAY_FROM ? 'saturday' : 'friday';
+        }
+
         function setupTabs() {
             document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.addEventListener('click', (e) => {
-                    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-                    document.querySelectorAll('.schedule-container').forEach(c => c.classList.remove('active'));
-
-                    e.target.classList.add('active');
-                    document.getElementById(`${e.target.dataset.day}-container`).classList.add('active');
-                });
+                btn.addEventListener('click', () => selectDay(btn.dataset.day));
             });
         }
 
