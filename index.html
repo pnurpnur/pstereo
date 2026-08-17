@@ -136,6 +136,7 @@
             border-right: 1px solid var(--line);
             padding: 0;
             min-height: 600px;
+            position: relative;
         }
 
         .time-label {
@@ -151,6 +152,12 @@
             font-weight: bold;
             width: 100%;
             text-align: center;
+        }
+
+        /* Klokkeslettet LIVE!-labelen legger seg oppå. color i stedet for
+           visibility, så den vannrette streken (border-top) blir stående. */
+        .time-label.covered-by-live {
+            color: transparent;
         }
 
         .scene-header {
@@ -206,6 +213,8 @@
             left: 4px;
             right: 4px;
             overflow: hidden;
+            /* Over live-linjen, slik at den ikke tegnes gjennom boksen */
+            z-index: 40;
         }
 
         .artist-box .time {
@@ -228,15 +237,50 @@
             border-bottom: 1px solid transparent;
         }
 
-        .artist-link:hover {
-            color: var(--cyan);
-            border-bottom-color: var(--cyan);
+        /* Bare på enheter med ekte peker. På touch henger :hover igjen etter
+           klikk, så den blå kanten ble stående når status gikk tilbake til none. */
+        @media (hover: hover) {
+            .artist-link:hover {
+                color: var(--cyan);
+                border-bottom-color: var(--cyan);
+            }
+
+            .artist-box:hover {
+                transform: translateY(-2px);
+                border-color: var(--cyan);
+                box-shadow: 0 4px 16px rgba(0, 201, 255, 0.25);
+            }
         }
 
-        .artist-box:hover {
-            transform: translateY(-2px);
-            border-color: var(--cyan);
-            box-shadow: 0 4px 16px rgba(0, 201, 255, 0.25);
+        .live-indicator {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--magenta);
+            pointer-events: none;
+            z-index: 25;
+            box-shadow: 0 0 8px var(--magenta);
+        }
+
+        /* Ligger inni .live-indicator, så den følger linjen presis.
+           bottom: 100% legger den rett over linjen, ikke bak den.
+           Ugjennomsiktig bakgrunn: når linja står like etter en hel time
+           (f.eks. 16:10) havner labelen oppå klokkeslettet, og skal dekke
+           det - ikke blande seg med teksten. */
+        .live-label {
+            position: absolute;
+            left: 0;
+            bottom: 100%;
+            width: 60px;
+            padding-bottom: 2px;
+            line-height: 1.2;
+            text-align: center;
+            color: var(--magenta);
+            font-weight: bold;
+            font-size: 0.75em;
+            background: var(--surface-alt);
         }
 
         .artist-box.yes {
@@ -272,6 +316,13 @@
             color: #fca5a5;
         }
 
+        /* Må komme etter status-reglene, ellers overstyrer status-fargen
+           den rosa kanten. Bakgrunn og tekstfarge fra status beholdes. */
+        .artist-box.live {
+            border: 2px solid var(--magenta);
+            box-shadow: 0 0 15px rgba(236, 0, 140, 0.6);
+        }
+
         @media (max-width: 768px) {
             #logo {
                 max-width: 150px;
@@ -301,6 +352,12 @@
 
             .time-label {
                 font-size: 0.65em;
+            }
+
+            /* Følger den smalere tidskolonnen */
+            .live-label {
+                width: 42px;
+                font-size: 0.6em;
             }
         }
     </style>
@@ -460,6 +517,9 @@
             setupTabs();
             selectDay(getDefaultDay());
             restoreAllStates();
+            setupLiveIndicator();
+            updateLiveIndicator();
+            setInterval(updateLiveIndicator, 60000); // Update every minute
         });
 
         function renderSchedule(day) {
@@ -593,6 +653,99 @@
         function setupTabs() {
             document.querySelectorAll('.tab-btn').forEach(btn => {
                 btn.addEventListener('click', () => selectDay(btn.dataset.day));
+            });
+        }
+
+        function setupLiveIndicator() {
+            ['friday', 'saturday'].forEach(day => {
+                const wrapper = document.getElementById(`${day}-wrapper`);
+
+                const liveIndicator = document.createElement('div');
+                liveIndicator.className = 'live-indicator';
+                liveIndicator.id = `${day}-live-indicator`;
+
+                const liveLabel = document.createElement('div');
+                liveLabel.className = 'live-label';
+                liveLabel.textContent = 'LIVE!';
+                liveIndicator.appendChild(liveLabel);
+
+                wrapper.appendChild(liveIndicator);
+            });
+        }
+
+        function updateLiveIndicator() {
+            const now = new Date();
+            const hours = now.getHours();
+            const minutes = now.getMinutes();
+            const currentMinutes = hours * 60 + minutes;
+            const startMinutes = START_HOUR * 60;
+
+            const offsetMinutes = currentMinutes - startMinutes;
+            const topPosition = (offsetMinutes / 60) * HOUR_HEIGHT;
+
+            ['friday', 'saturday'].forEach(day => {
+                const indicator = document.getElementById(`${day}-live-indicator`);
+                if (!indicator) return;
+
+                if (topPosition >= 0 && topPosition <= (END_HOUR - START_HOUR) * HOUR_HEIGHT) {
+                    indicator.style.top = topPosition + 'px';
+                    indicator.style.display = 'block';
+
+                    updateLiveArtists(day, topPosition);
+                    hideCoveredClock(day, indicator);
+                } else {
+                    indicator.style.display = 'none';
+                    clearLiveArtists(day);
+                    hideCoveredClock(day, null);
+                }
+            });
+        }
+
+        // LIVE!-labelen er låst rett over linja, så står linja litt etter en hel
+        // time lander labelen oppå klokkeslettet. Da skjuler vi klokka.
+        // Range måler selve teksten, ikke hele den 120px høye timeruta.
+        function hideCoveredClock(day, indicator) {
+            const labelRect = indicator
+                ? indicator.querySelector('.live-label').getBoundingClientRect()
+                : null;
+
+            document.querySelectorAll(`#${day}-time-axis .time-label`).forEach(timeLabel => {
+                let covered = false;
+                if (labelRect) {
+                    const range = document.createRange();
+                    range.selectNodeContents(timeLabel);
+                    const textRect = range.getBoundingClientRect();
+                    covered = textRect.bottom > labelRect.top && textRect.top < labelRect.bottom;
+                }
+                timeLabel.classList.toggle('covered-by-live', covered);
+            });
+        }
+
+        function updateLiveArtists(day, liveTopPosition) {
+            const data = schedule[day];
+
+            data.concerts.forEach(concert => {
+                const box = document.getElementById(getArtistId(concert.name));
+                if (!box) return;
+
+                const boxTop = parseFloat(box.style.top);
+                const boxBottom = boxTop + BOX_HEIGHT;
+
+                if (liveTopPosition >= boxTop && liveTopPosition <= boxBottom) {
+                    box.classList.add('live');
+                } else {
+                    box.classList.remove('live');
+                }
+            });
+        }
+
+        function clearLiveArtists(day) {
+            const data = schedule[day];
+            data.concerts.forEach(concert => {
+                const box = document.getElementById(getArtistId(concert.name));
+                if (box) {
+                    box.classList.remove('live');
+                }
             });
         }
 
