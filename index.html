@@ -691,19 +691,21 @@
             const offsetMinutes = currentMinutes - startMinutes;
             const topPosition = (offsetMinutes / 60) * HOUR_HEIGHT;
 
-            // Festivalen er bare fredag 21. august og lørdag 22. august 2026.
-            // Siden skal vise live-indikatoren bare den aktuelle dagen.
+            // Festivalen er fredag 21. august og lørdag 22. august 2026.
+            // Live-indikatoren vises bare i det aktuelle programmets dag.
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const friday = new Date(2026, 7, 21);
             const saturday = new Date(2026, 7, 22);
-            const isFestivalDay = today.getTime() === friday.getTime() || today.getTime() === saturday.getTime();
 
             ['friday', 'saturday'].forEach(day => {
                 const indicator = document.getElementById(`${day}-live-indicator`);
                 if (!indicator) return;
 
-                if (isFestivalDay && topPosition >= 0 && topPosition <= (END_HOUR - START_HOUR) * HOUR_HEIGHT) {
+                const isCorrectDay = (day === 'friday' && today.getTime() === friday.getTime()) ||
+                                     (day === 'saturday' && today.getTime() === saturday.getTime());
+
+                if (isCorrectDay && topPosition >= 0 && topPosition <= (END_HOUR - START_HOUR) * HOUR_HEIGHT) {
                     indicator.style.top = topPosition + 'px';
                     indicator.style.display = 'block';
 
